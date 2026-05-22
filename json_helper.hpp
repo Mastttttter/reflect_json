@@ -158,15 +158,16 @@ void details::apply_default_for_member(T &obj) {
   }
 }
 
-template <std::meta::info M, typename T>
-void demo(T &obj) {
-  using namespace std::string_literals;
-  using Member = std::remove_cvref_t<decltype(obj.[:M:])>;
-  static_assert(std::same_as<decltype(obj.[:M:]), Member>, "not same type!!!");
-  static_assert(details::is_json_serializable<^^decltype(obj.[:M:])>() ==
-                    details::is_json_serializable<^^Member>(),
-                "not same annotation!!!");
-}
+// template <std::meta::info M, typename T>
+// void demo(T &obj) {
+//   using namespace std::string_literals;
+//   using Member = std::remove_cvref_t<decltype(obj.[:M:])>;
+//   static_assert(std::same_as<decltype(obj.[:M:]), Member>, "not same
+//   type!!!");
+//   static_assert(details::is_json_serializable<^^decltype(obj.[:M:])>() ==
+//                     details::is_json_serializable<^^Member>(),
+//                 "not same annotation!!!");
+// }
 
 template <typename T>
 void details::apply_annotations_defaults_into(T &obj) {
