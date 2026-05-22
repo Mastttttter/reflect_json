@@ -26,6 +26,14 @@ inline consteval default_string_t default_string(std::string_view s) {
   return default_string_t(std::define_static_string(s));
 }
 
+struct rename_t {
+  char const *value;
+};
+
+inline consteval rename_t rename(std::string_view name) {
+  return rename_t(std::define_static_string(name));
+}
+
 }  // namespace json_meta
 
 namespace details {
@@ -65,7 +73,9 @@ consteval bool is_ignored_member() {
 
 template <std::meta::info M>
 constexpr bool is_json_serializable() {
-  return get_unique_annotation<M, json_meta::serializable_t>().has_value();
+  return get_unique_annotation<std::meta::dealias(M),
+                               json_meta::serializable_t>()
+      .has_value();
 }
 
 template <typename T>
@@ -121,6 +131,7 @@ void details::json_assign(nlohmann::json const &json, T &out) {
 
 template <std::meta::info M, typename T>
 void details::apply_default_for_member(T &obj) {
+  using namespace std::string_literals;
   using Member = std::remove_cvref_t<decltype(obj.[:M:])>;
   if constexpr (std::same_as<Member, std::string>) {
     constexpr auto ann =
@@ -135,14 +146,26 @@ void details::apply_default_for_member(T &obj) {
       obj.[:M:] = ann->value;
     }
   } else if constexpr (std::is_class_v<Member>) {
+    if constexpr (!details::is_json_serializable<^^Member>()) {
+      throw std::runtime_error("object should be esrializable:"s +
+                               std::meta::identifier_of(^^decltype(obj.[:M:])));
+    }
     constexpr auto ann =
         details::get_unique_annotation<M, json_meta::default_value<Member>>();
     if constexpr (ann.has_value()) {
       obj.[:M:] = ann->value;
-    } else {
-      details::apply_annotations_defaults_into(obj.[:M:]);
     }
   }
+}
+
+template <std::meta::info M, typename T>
+void demo(T &obj) {
+  using namespace std::string_literals;
+  using Member = std::remove_cvref_t<decltype(obj.[:M:])>;
+  static_assert(std::same_as<decltype(obj.[:M:]), Member>, "not same type!!!");
+  static_assert(details::is_json_serializable<^^decltype(obj.[:M:])>() ==
+                    details::is_json_serializable<^^Member>(),
+                "not same annotation!!!");
 }
 
 template <typename T>
@@ -163,6 +186,9 @@ void from_json_reflect_into(nlohmann::json const &json, T &obj) {
   if (!json.is_object()) {
     throw std::runtime_error("expected json object");
   }
+  if (!details::is_json_serializable<^^T>()) {
+    throw std::runtime_error("object should be esrializable");
+  }
   details::apply_annotations_defaults_into(obj);
   constexpr auto ctx = access_context::current();
   template for (constexpr auto M:
@@ -170,7 +196,13 @@ void from_json_reflect_into(nlohmann::json const &json, T &obj) {
     if constexpr (details::is_ignored_member<M>()) {
       continue;
     } else if constexpr (has_identifier(M)) {
-      constexpr std::string_view name = identifier_of(M);
+      std::string_view name = identifier_of(M);
+      if constexpr (constexpr auto rename =
+                        details::get_unique_annotation<M,
+                                                       json_meta::rename_t>();
+                    rename.has_value()) {
+        name = rename->value;
+      }
       auto it = json.find(std::string{name});
       if (it != json.end()) {
         details::json_assign(it.value(), obj.[:M:]);
@@ -212,7 +244,13 @@ nlohmann::json reflect_to_json(T const &o) {
   template for (constexpr auto M:
                 std::define_static_array(nonstatic_data_members_of(^^T, ctx))) {
     if constexpr (!details::is_ignored_member<M>() && has_identifier(M)) {
-      constexpr std::string_view name = identifier_of(M);
+      std::string_view name = identifier_of(M);
+      if constexpr (constexpr auto rename =
+                        details::get_unique_annotation<M,
+                                                       json_meta::rename_t>();
+                    rename.has_value()) {
+        name = rename->value;
+      }
       json_obj[std::string{name}] = details::json_value(o.[:M:]);
     }
   }

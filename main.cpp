@@ -35,8 +35,8 @@ enum class test {
 };
 
 struct[[= json_helper::json_meta::serializable]] Config_ {
-  [[= json_helper::json_meta::default_value{
-      Server_{.port = 7890}}]] Server_ server;
+  [[= json_helper::json_meta::default_value{Server_{.port = 7890}}]]
+      [[= json_helper::json_meta::rename("server_rename")]] Server_ server;
   Logging_ logging;
   [[= json_helper::json_meta::default_value{test::green}]] test test_;
   [[= json_helper::json_meta::ignore]] test test1;
