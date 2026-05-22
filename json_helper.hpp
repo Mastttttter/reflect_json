@@ -164,6 +164,8 @@ void details::apply_default_for_member(T &obj) {
         details::get_unique_annotation<M, json_meta::default_value<Member>>();
     if constexpr (ann.has_value()) {
       obj.[:M:] = ann->value;
+    } else {
+      apply_annotations_defaults_into(obj.[:M:]);
     }
   }
 }
@@ -189,7 +191,6 @@ void from_json_reflect_into(nlohmann::json const &json, T &obj) {
   if (!details::is_json_serializable<^^T>()) {
     throw std::runtime_error("object should be esrializable");
   }
-  details::apply_annotations_defaults_into(obj);
   constexpr auto ctx = access_context::current();
   template for (constexpr auto M:
                 std::define_static_array(nonstatic_data_members_of(^^T, ctx))) {
@@ -206,6 +207,8 @@ void from_json_reflect_into(nlohmann::json const &json, T &obj) {
       auto it = json.find(std::string{name});
       if (it != json.end()) {
         details::json_assign(it.value(), obj.[:M:]);
+      } else {
+        details::apply_default_for_member<M>(obj);
       }
     }
   }

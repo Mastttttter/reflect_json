@@ -40,6 +40,7 @@ struct[[= json_helper::json_meta::serializable]] Config_ {
   Logging_ logging;
   [[= json_helper::json_meta::default_value{test::green}]] test test_;
   [[= json_helper::json_meta::ignore]] test test1;
+  [[= json_helper::json_meta::default_value{false}]] bool tb = true;
 };
 
 int main() {
