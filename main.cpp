@@ -34,10 +34,10 @@ enum class test {
 };
 
 struct Config_ {
-  [[= json_helper::json_meta::default_value<Server_>{
+  [[= json_helper::json_meta::default_value{
       Server_{.port = 7890}}]] Server_ server;
   Logging_ logging;
-  [[= json_helper::json_meta::default_value<test>{test::green}]] test test_;
+  [[= json_helper::json_meta::default_value{test::green}]] test test_;
   [[= json_helper::json_meta::ignore]] test test1;
 };
 

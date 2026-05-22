@@ -192,7 +192,7 @@ nlohmann::json reflect_to_json(T const &o) {
   constexpr auto ctx = access_context::current();
   template for (constexpr auto M:
                 std::define_static_array(nonstatic_data_members_of(^^T, ctx))) {
-    if constexpr (has_identifier(M)) {
+    if constexpr (!details::is_ignored_member<M>() && has_identifier(M)) {
       constexpr std::string_view name = identifier_of(M);
       json_obj[std::string{name}] = details::json_value(o.[:M:]);
     }
