@@ -15,13 +15,14 @@
 #include <vector>
 #include "json_helper.hpp"
 
-struct Server_ {
+struct[[= json_helper::json_meta::serializable]] Server_ {
   int port = 8080;
 };
 
-struct Logging_ {
+struct[[= json_helper::json_meta::serializable]] Logging_ {
   std::string log_file_path = "logs/server.log";
-  std::string log_level = "info";
+  [[= json_helper::json_meta::default_string("asdf")]] std::string log_level =
+      "info";
   size_t log_file_size = 10 * 1024 * 1024uz;
   int lof_file_count = 5;
   bool console_output = false;
@@ -33,7 +34,7 @@ enum class test {
   green,
 };
 
-struct Config_ {
+struct[[= json_helper::json_meta::serializable]] Config_ {
   [[= json_helper::json_meta::default_value{
       Server_{.port = 7890}}]] Server_ server;
   Logging_ logging;

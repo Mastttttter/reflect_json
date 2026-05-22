@@ -9,14 +9,23 @@ struct ignore_t {};
 
 inline constexpr ignore_t ignore{};
 
+struct serializable_t {};
+
+inline constexpr serializable_t serializable{};
+
 template <typename T>
 struct default_value {
   T value;
 };
 
-struct default_string {
+struct default_string_t {
   char const *value;
 };
+
+inline consteval default_string_t default_string(std::string_view s) {
+  return default_string_t(std::define_static_string(s));
+}
+
 }  // namespace json_meta
 
 namespace details {
@@ -54,6 +63,11 @@ consteval bool is_ignored_member() {
   return get_unique_annotation<M, json_meta::ignore_t>().has_value();
 }
 
+template <std::meta::info M>
+constexpr bool is_json_serializable() {
+  return get_unique_annotation<M, json_meta::serializable_t>().has_value();
+}
+
 template <typename T>
 nlohmann::json json_value(T const &value);
 
@@ -69,6 +83,7 @@ void json_assign(nlohmann::json const &json, T &out);
 }  // namespace details
 
 template <typename T>
+  requires std::is_class_v<T>
 nlohmann::json reflect_to_json(T const &o);
 
 template <typename T>
@@ -109,7 +124,7 @@ void details::apply_default_for_member(T &obj) {
   using Member = std::remove_cvref_t<decltype(obj.[:M:])>;
   if constexpr (std::same_as<Member, std::string>) {
     constexpr auto ann =
-        details::get_unique_annotation<M, json_meta::default_string>();
+        details::get_unique_annotation<M, json_meta::default_string_t>();
     if constexpr (ann.has_value()) {
       obj.[:M:] = ann->value;
     }
@@ -186,8 +201,12 @@ nlohmann::json details::json_value(T const &value) {
 }
 
 template <typename T>
+  requires std::is_class_v<T>
 nlohmann::json reflect_to_json(T const &o) {
   using namespace std::meta;
+  if constexpr (!details::is_json_serializable<^^T>()) {
+    throw std::runtime_error("object need to be serializable");
+  }
   nlohmann::json json_obj = nlohmann::json::object();
   constexpr auto ctx = access_context::current();
   template for (constexpr auto M:
