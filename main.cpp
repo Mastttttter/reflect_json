@@ -7,6 +7,7 @@
 #include <future>
 #include <iostream>
 #include <numeric>
+#include <optional>
 #include <print>
 #include <queue>
 #include <ranges>
@@ -41,11 +42,24 @@ struct[[= json_helper::json_meta::serializable]] Config_ {
   [[= json_helper::json_meta::default_value{test::green}]] test test_;
   [[= json_helper::json_meta::ignore]] test test1;
   [[= json_helper::json_meta::default_value{false}]] bool tb = true;
+  std::optional<std::string> profile;
+  std::optional<int> timeout_seconds;
+  nlohmann::json raw_payload;
+  std::optional<nlohmann::json> optional_raw_payload;
 };
 
 int main() {
-  std::stringstream ss{R"({})"};
-  auto data = nlohmann::json::parse(ss);
+  auto data = nlohmann::json::parse(R"({
+    "profile": "debug",
+    "timeout_seconds": null,
+    "raw_payload": {
+      "enabled": true,
+      "thresholds": [1, 2, 3]
+    },
+    "optional_raw_payload": {
+      "mode": "pass-through"
+    }
+  })");
   auto cfg = json_helper::from_json_reflect<Config_>(data);
   auto ndata = json_helper::reflect_to_json(cfg);
   std::println("{}", ndata.dump(4));

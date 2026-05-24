@@ -12,6 +12,8 @@
 - Convert enums to and from enumerator names.
 - Handle nested serializable structs.
 - Deserialize `std::vector` values recursively.
+- Omit empty `std::optional<T>` members during serialization.
+- Pass `nlohmann::json` members through as raw JSON values.
 
 ## Requirements
 
@@ -34,6 +36,7 @@ Copy `json_helper.hpp` and `enum_helper.hpp` into your project, include `json_he
 
 ```cpp
 #include <iostream>
+#include <optional>
 #include <nlohmann/json.hpp>
 #include "json_helper.hpp"
 
@@ -64,12 +67,27 @@ struct [[= json_helper::json_meta::serializable]] AppConfig {
   [[= json_helper::json_meta::default_value{Color::green}]]
   Color color;
 
+  std::optional<std::string> environment;
+  std::optional<int> timeout_seconds;
+  nlohmann::json metadata;
+  std::optional<nlohmann::json> inline_metadata;
+
   [[= json_helper::json_meta::ignore]]
   int runtime_only_value = 0;
 };
 
 int main() {
-  auto input = nlohmann::json::parse(R"({})");
+  auto input = nlohmann::json::parse(R"({
+    "environment": "production",
+    "timeout_seconds": null,
+    "metadata": {
+      "owner": "ops",
+      "tags": ["sample", "raw"]
+    },
+    "inline_metadata": {
+      "priority": 1
+    }
+  })");
 
   auto config = json_helper::from_json_reflect<AppConfig>(input);
   auto output = json_helper::reflect_to_json(config);
@@ -83,10 +101,21 @@ Output:
 ```json
 {
   "color": "green",
+  "environment": "production",
+  "inline_metadata": {
+    "priority": 1
+  },
   "logging": {
     "console_output": false,
     "file_path": "logs/server.log",
     "level": "info"
+  },
+  "metadata": {
+    "owner": "ops",
+    "tags": [
+      "sample",
+      "raw"
+    ]
   },
   "server": {
     "port": 7890
@@ -103,7 +132,7 @@ template <typename T>
 nlohmann::json reflect_to_json(T const& value);
 ```
 
-Serializes a `serializable` struct into a JSON object. Field names come from member names unless `rename` is present. Ignored fields are skipped. Enum values are written as enumerator names.
+Serializes a `serializable` struct into a JSON object. Field names come from member names unless `rename` is present. Ignored fields are skipped. Enum values are written as enumerator names. Empty optional members are omitted.
 
 ### `json_helper::from_json_reflect`
 
@@ -177,7 +206,7 @@ struct [[= json_helper::json_meta::serializable]] Config {
 
 ### `default_value`
 
-Sets a default for missing arithmetic, enum, or serializable class fields before JSON assignment.
+Sets a default for missing arithmetic, enum, optional, raw JSON, or serializable class fields before JSON assignment.
 
 ```cpp
 struct [[= json_helper::json_meta::serializable]] Config {
@@ -205,13 +234,17 @@ cmake --build out/Debug
 ./out/Debug/reflect_json
 ```
 
-The sample in `main.cpp` deserializes an empty JSON object, applies defaults, serializes the resulting config, and prints the JSON.
+The sample in `main.cpp` deserializes present optional values, null optional values, and raw JSON payloads, then prints the reflected JSON.
 
 ## Behavior notes
 
 - Input to `from_json_reflect` must be a JSON object.
 - A type must be annotated with `serializable` before it can be reflected.
 - Missing JSON keys keep constructor defaults unless an annotation default is present.
+- Missing optional keys use `default_value<std::optional<T>>` when present, otherwise they reset to empty.
+- JSON `null` assigned to `std::optional<T>` resets it to empty.
+- `std::optional<nlohmann::json>` treats JSON `null` as empty; use plain `nlohmann::json` when a present null must be preserved.
+- Raw `nlohmann::json` members pass objects, arrays, scalars, and null through unchanged.
 - JSON keys override annotation defaults when present.
 - Invalid enum strings throw at runtime.
 - Duplicate annotations of the same kind on one target are rejected.

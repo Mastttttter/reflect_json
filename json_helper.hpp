@@ -1,5 +1,7 @@
 #pragma once
+#include <concepts>
 #include <meta>
+#include <optional>
 #include <nlohmann/json.hpp>
 #include "enum_helper.hpp"
 
@@ -62,7 +64,18 @@ template <typename T, typename Allocator>
 struct is_vector<std::vector<T, Allocator>> : std::true_type {};
 
 template <typename T>
+struct is_optional : std::false_type {};
+
+template <typename T>
+struct is_optional<std::optional<T>> : std::true_type {
+  using value_type = T;
+};
+
+template <typename T>
 inline constexpr bool is_vector_v = is_vector<std::remove_cvref_t<T>>::value;
+
+template <typename T>
+inline constexpr bool is_optional_v = is_optional<std::remove_cvref_t<T>>::value;
 
 template <std::meta::info M, typename Ann>
 consteval std::optional<Ann> get_unique_annotation() {
@@ -112,7 +125,18 @@ void from_json_reflect_into(nlohmann::json const &json, T &obj);
 template <typename T>
 void details::json_assign(nlohmann::json const &json, T &out) {
   using U = std::remove_cvref_t<T>;
-  if constexpr (details::is_vector_v<U>) {
+  if constexpr (std::same_as<U, nlohmann::json>) {
+    out = json;
+  } else if constexpr (details::is_optional_v<U>) {
+    if (json.is_null()) {
+      out.reset();
+    } else {
+      using Value = typename details::is_optional<U>::value_type;
+      Value value{};
+      details::json_assign(json, value);
+      out = std::move(value);
+    }
+  } else if constexpr (details::is_vector_v<U>) {
     if (!json.is_array()) {
       throw std::runtime_error("except json array");
     }
@@ -143,13 +167,27 @@ template <std::meta::info M, typename T>
 void details::apply_default_for_member(T &obj) {
   using namespace std::string_literals;
   using Member = std::remove_cvref_t<decltype(obj.[:M:])>;
-  if constexpr (std::same_as<Member, std::string>) {
+  if constexpr (details::is_optional_v<Member>) {
+    constexpr auto ann =
+        details::get_unique_annotation<M, json_meta::default_value<Member>>();
+    if constexpr (ann.has_value()) {
+      obj.[:M:] = ann->value;
+    } else {
+      obj.[:M:].reset();
+    }
+  } else if constexpr (std::same_as<Member, std::string>) {
     constexpr auto ann =
         details::get_unique_annotation<M, json_meta::default_string_t>();
     if constexpr (ann.has_value()) {
       obj.[:M:] = ann->value;
     }
   } else if constexpr (std::is_arithmetic_v<Member> || std::is_enum_v<Member>) {
+    constexpr auto ann =
+        details::get_unique_annotation<M, json_meta::default_value<Member>>();
+    if constexpr (ann.has_value()) {
+      obj.[:M:] = ann->value;
+    }
+  } else if constexpr (std::same_as<Member, nlohmann::json>) {
     constexpr auto ann =
         details::get_unique_annotation<M, json_meta::default_value<Member>>();
     if constexpr (ann.has_value()) {
@@ -254,7 +292,14 @@ nlohmann::json reflect_to_json(T const &o) {
                     rename.has_value()) {
         name = rename->value;
       }
-      json_obj[std::string{name}] = details::json_value(o.[:M:]);
+      using Member = std::remove_cvref_t<decltype(o.[:M:])>;
+      if constexpr (details::is_optional_v<Member>) {
+        if (o.[:M:].has_value()) {
+          json_obj[std::string{name}] = details::json_value(*o.[:M:]);
+        }
+      } else {
+        json_obj[std::string{name}] = details::json_value(o.[:M:]);
+      }
     }
   }
   return json_obj;
