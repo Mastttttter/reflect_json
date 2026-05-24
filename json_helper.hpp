@@ -2,6 +2,11 @@
 #include <concepts>
 #include <meta>
 #include <optional>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <type_traits>
+#include <vector>
 #include <nlohmann/json.hpp>
 #include "enum_helper.hpp"
 
@@ -10,10 +15,6 @@ namespace json_meta {
 struct ignore_t {};
 
 inline constexpr ignore_t ignore{};
-
-struct serializable_t {};
-
-inline constexpr serializable_t serializable{};
 
 template <typename T>
 struct default_value {
@@ -39,17 +40,6 @@ inline consteval rename_t rename(std::string_view name) {
 }  // namespace json_meta
 
 namespace details {
-// template <std::meta::info M, typename T>
-// void demo(T &obj) {
-//   using namespace std::string_literals;
-//   using Member = std::remove_cvref_t<decltype(obj.[:M:])>;
-//   static_assert(std::same_as<decltype(obj.[:M:]), Member>, "not same
-//   type!!!");
-//   static_assert(details::is_json_serializable<^^decltype(obj.[:M:])>() ==
-//                     details::is_json_serializable<^^Member>(),
-//                 "not same annotation!!!");
-// }
-
 template <typename T>
 inline constexpr bool always_false_v = false;
 
@@ -77,6 +67,12 @@ inline constexpr bool is_vector_v = is_vector<std::remove_cvref_t<T>>::value;
 template <typename T>
 inline constexpr bool is_optional_v = is_optional<std::remove_cvref_t<T>>::value;
 
+template <typename T>
+concept json_reflectable_object =
+    std::is_class_v<std::remove_cvref_t<T>> &&
+    !std::same_as<std::remove_cvref_t<T>, nlohmann::json> && !is_vector_v<T> &&
+    !is_optional_v<T> && !josn_get_to_able<std::remove_cvref_t<T>>;
+
 template <std::meta::info M, typename Ann>
 consteval std::optional<Ann> get_unique_annotation() {
   std::optional<Ann> result;
@@ -94,13 +90,6 @@ consteval bool is_ignored_member() {
   return get_unique_annotation<M, json_meta::ignore_t>().has_value();
 }
 
-template <std::meta::info M>
-constexpr bool is_json_serializable() {
-  return get_unique_annotation<std::meta::dealias(M),
-                               json_meta::serializable_t>()
-      .has_value();
-}
-
 template <typename T>
 nlohmann::json json_value(T const &value);
 
@@ -116,10 +105,11 @@ void json_assign(nlohmann::json const &json, T &out);
 }  // namespace details
 
 template <typename T>
-  requires std::is_class_v<T>
+  requires details::json_reflectable_object<T>
 nlohmann::json reflect_to_json(T const &o);
 
 template <typename T>
+  requires details::json_reflectable_object<T>
 void from_json_reflect_into(nlohmann::json const &json, T &obj);
 
 template <typename T>
@@ -156,7 +146,7 @@ void details::json_assign(nlohmann::json const &json, T &out) {
     }
   } else if constexpr (details::josn_get_to_able<U>) {
     json.get_to(out);
-  } else if constexpr (std::is_class_v<U>) {
+  } else if constexpr (details::json_reflectable_object<U>) {
     from_json_reflect_into(json, out);
   } else {
     static_assert(details::always_false_v<U>, "invalid type to json");
@@ -193,11 +183,7 @@ void details::apply_default_for_member(T &obj) {
     if constexpr (ann.has_value()) {
       obj.[:M:] = ann->value;
     }
-  } else if constexpr (std::is_class_v<Member>) {
-    if constexpr (!details::is_json_serializable<^^Member>()) {
-      throw std::runtime_error("object should be esrializable:"s +
-                               std::meta::identifier_of(^^decltype(obj.[:M:])));
-    }
+  } else if constexpr (details::json_reflectable_object<Member>) {
     constexpr auto ann =
         details::get_unique_annotation<M, json_meta::default_value<Member>>();
     if constexpr (ann.has_value()) {
@@ -221,13 +207,11 @@ void details::apply_annotations_defaults_into(T &obj) {
 }
 
 template <typename T>
+  requires details::json_reflectable_object<T>
 void from_json_reflect_into(nlohmann::json const &json, T &obj) {
   using namespace std::meta;
   if (!json.is_object()) {
     throw std::runtime_error("expected json object");
-  }
-  if (!details::is_json_serializable<^^T>()) {
-    throw std::runtime_error("object should be esrializable");
   }
   constexpr auto ctx = access_context::current();
   template for (constexpr auto M:
@@ -253,7 +237,7 @@ void from_json_reflect_into(nlohmann::json const &json, T &obj) {
 }
 
 template <typename T>
-  requires std::default_initializable<T>
+  requires std::default_initializable<T> && details::json_reflectable_object<T>
 T from_json_reflect(nlohmann::json const &json) {
   T obj{};
   from_json_reflect_into(json, obj);
@@ -266,7 +250,7 @@ nlohmann::json details::json_value(T const &value) {
     return nlohmann::json(enum_helper::enum_to_string(value));
   } else if constexpr (requires { nlohmann::json(value); }) {
     return nlohmann::json(value);
-  } else if constexpr (std::is_class_v<std::remove_cvref_t<T>>) {
+  } else if constexpr (details::json_reflectable_object<T>) {
     return reflect_to_json(value);
   } else {
     static_assert(details::always_false_v<T>, "invalid type to json");
@@ -274,12 +258,9 @@ nlohmann::json details::json_value(T const &value) {
 }
 
 template <typename T>
-  requires std::is_class_v<T>
+  requires details::json_reflectable_object<T>
 nlohmann::json reflect_to_json(T const &o) {
   using namespace std::meta;
-  if constexpr (!details::is_json_serializable<^^T>()) {
-    throw std::runtime_error("object need to be serializable");
-  }
   nlohmann::json json_obj = nlohmann::json::object();
   constexpr auto ctx = access_context::current();
   template for (constexpr auto M:

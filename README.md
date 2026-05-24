@@ -1,16 +1,16 @@
 # reflect_json
 
-`reflect_json` is a header-only C++ JSON reflection helper built on top of [`nlohmann::json`](https://github.com/nlohmann/json). It uses C++ reflection annotations to convert ordinary structs to and from JSON without hand-written `to_json` / `from_json` functions.
+`reflect_json` is a header-only C++ JSON reflection helper built on top of [`nlohmann::json`](https://github.com/nlohmann/json). It uses C++ reflection and field annotations to convert ordinary structs to and from JSON without hand-written `to_json` / `from_json` functions.
 
 ## Features
 
-- Serialize annotated structs with `reflect_to_json`.
+- Serialize structs with `reflect_to_json`.
 - Deserialize JSON objects with `from_json_reflect` or `from_json_reflect_into`.
 - Rename fields in JSON output/input.
 - Ignore fields during serialization and deserialization.
 - Apply defaults for missing JSON keys.
 - Convert enums to and from enumerator names.
-- Handle nested serializable structs.
+- Handle nested structs.
 - Deserialize `std::vector` values recursively.
 - Omit empty `std::optional<T>` members during serialization.
 - Pass `nlohmann::json` members through as raw JSON values.
@@ -32,7 +32,7 @@ target_compile_options(reflect_json PRIVATE -freflection)
 
 ## Quick start
 
-Copy `json_helper.hpp` and `enum_helper.hpp` into your project, include `json_helper.hpp`, and mark structs with `json_helper::json_meta::serializable`.
+Copy `json_helper.hpp` and `enum_helper.hpp` into your project, include `json_helper.hpp`, and call the reflection helpers on ordinary structs.
 
 ```cpp
 #include <iostream>
@@ -40,11 +40,11 @@ Copy `json_helper.hpp` and `enum_helper.hpp` into your project, include `json_he
 #include <nlohmann/json.hpp>
 #include "json_helper.hpp"
 
-struct [[= json_helper::json_meta::serializable]] ServerConfig {
+struct ServerConfig {
   int port = 8080;
 };
 
-struct [[= json_helper::json_meta::serializable]] LoggingConfig {
+struct LoggingConfig {
   std::string file_path = "logs/server.log";
   [[= json_helper::json_meta::default_string("info")]]
   std::string level;
@@ -57,7 +57,7 @@ enum class Color {
   green,
 };
 
-struct [[= json_helper::json_meta::serializable]] AppConfig {
+struct AppConfig {
   [[= json_helper::json_meta::rename("server")]]
   [[= json_helper::json_meta::default_value{ServerConfig{.port = 7890}}]]
   ServerConfig server_config;
@@ -132,7 +132,7 @@ template <typename T>
 nlohmann::json reflect_to_json(T const& value);
 ```
 
-Serializes a `serializable` struct into a JSON object. Field names come from member names unless `rename` is present. Ignored fields are skipped. Enum values are written as enumerator names. Empty optional members are omitted.
+Serializes a reflected struct into a JSON object. Field names come from member names unless `rename` is present. Ignored fields are skipped. Enum values are written as enumerator names. Empty optional members are omitted.
 
 ### `json_helper::from_json_reflect`
 
@@ -172,22 +172,12 @@ Finds an enum value by enumerator name.
 
 ## Annotations
 
-### `serializable`
-
-Marks a struct as eligible for reflection-based JSON conversion.
-
-```cpp
-struct [[= json_helper::json_meta::serializable]] Config {
-  int port = 8080;
-};
-```
-
 ### `rename`
 
 Uses a different JSON key for a field.
 
 ```cpp
-struct [[= json_helper::json_meta::serializable]] Config {
+struct Config {
   [[= json_helper::json_meta::rename("server_port")]]
   int port = 8080;
 };
@@ -198,7 +188,7 @@ struct [[= json_helper::json_meta::serializable]] Config {
 Excludes a field from serialization and deserialization.
 
 ```cpp
-struct [[= json_helper::json_meta::serializable]] Config {
+struct Config {
   [[= json_helper::json_meta::ignore]]
   int runtime_only_value = 0;
 };
@@ -206,10 +196,10 @@ struct [[= json_helper::json_meta::serializable]] Config {
 
 ### `default_value`
 
-Sets a default for missing arithmetic, enum, optional, raw JSON, or serializable class fields before JSON assignment.
+Sets a default for missing arithmetic, enum, optional, raw JSON, or nested struct fields before JSON assignment.
 
 ```cpp
-struct [[= json_helper::json_meta::serializable]] Config {
+struct Config {
   [[= json_helper::json_meta::default_value{8080}]]
   int port;
 };
@@ -220,7 +210,7 @@ struct [[= json_helper::json_meta::serializable]] Config {
 Sets a default for a missing `std::string` field.
 
 ```cpp
-struct [[= json_helper::json_meta::serializable]] Config {
+struct Config {
   [[= json_helper::json_meta::default_string("info")]]
   std::string log_level;
 };
@@ -239,7 +229,6 @@ The sample in `main.cpp` deserializes present optional values, null optional val
 ## Behavior notes
 
 - Input to `from_json_reflect` must be a JSON object.
-- A type must be annotated with `serializable` before it can be reflected.
 - Missing JSON keys keep constructor defaults unless an annotation default is present.
 - Missing optional keys use `default_value<std::optional<T>>` when present, otherwise they reset to empty.
 - JSON `null` assigned to `std::optional<T>` resets it to empty.
@@ -251,7 +240,7 @@ The sample in `main.cpp` deserializes present optional values, null optional val
 
 ## Exceptions
 
-`reflect_json` reports conversion failures with `std::runtime_error`, including non-object input, non-serializable reflected types, invalid enum strings, and JSON values that do not match the expected container shape.
+`reflect_json` reports conversion failures with `std::runtime_error`, including non-object input, invalid enum strings, and JSON values that do not match the expected container shape.
 
 ## License
 

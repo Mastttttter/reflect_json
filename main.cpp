@@ -16,11 +16,11 @@
 #include <vector>
 #include "json_helper.hpp"
 
-struct[[= json_helper::json_meta::serializable]] Server_ {
+struct Server_ {
   int port = 8080;
 };
 
-struct[[= json_helper::json_meta::serializable]] Logging_ {
+struct Logging_ {
   std::string log_file_path = "logs/server.log";
   [[= json_helper::json_meta::default_string("asdf")]] std::string log_level =
       "info";
@@ -35,7 +35,7 @@ enum class test {
   green,
 };
 
-struct[[= json_helper::json_meta::serializable]] Config_ {
+struct Config_ {
   [[= json_helper::json_meta::default_value{Server_{.port = 7890}}]]
       [[= json_helper::json_meta::rename("server_rename")]] Server_ server;
   Logging_ logging;
