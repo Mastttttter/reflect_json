@@ -248,6 +248,12 @@ template <typename T>
 nlohmann::json details::json_value(T const &value) {
   if constexpr (std::is_enum_v<T>) {
     return nlohmann::json(enum_helper::enum_to_string(value));
+  } else if constexpr (details::is_vector_v<T>) {
+    nlohmann::json result = nlohmann::json::array();
+    for (auto const &item: value) {
+      result.push_back(details::json_value(item));
+    }
+    return result;
   } else if constexpr (requires { nlohmann::json(value); }) {
     return nlohmann::json(value);
   } else if constexpr (details::json_reflectable_object<T>) {
